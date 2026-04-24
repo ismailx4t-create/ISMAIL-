@@ -23,7 +23,8 @@ from telegram.ext import (
 # ─────────────────────────────────────────
 #  ⚙️  الإعدادات – عدّلها حسب احتياجك
 # ─────────────────────────────────────────
-BOT_TOKEN = "YOUR_BOT_TOKEN_HERE"   # ← ضع توكن البوت هنا
+import os
+BOT_TOKEN = os.environ.get("BOT_TOKEN")
 
 # قائمة الخدمات  {id: {name, description, price_stars, emoji}}
 SERVICES = {
