@@ -1,48 +1,64 @@
 """
-بوت تيليجرام للدفع باستخدام Telegram Stars
-يدعم بيع الخدمات للزبائن
+بوت ذكي للرد التلقائي على الزبائن
+خاص بمبيعات هاك ببجي موبايل
 """
 
 import logging
 import os
-from telegram import (
-    Update,
-    InlineKeyboardButton,
-    InlineKeyboardMarkup,
-    LabeledPrice,
-)
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application,
     CommandHandler,
     CallbackQueryHandler,
-    PreCheckoutQueryHandler,
     MessageHandler,
     filters,
     ContextTypes,
+    ConversationHandler,
 )
 
+# ─────────────────────────────────────────
+#  ⚙️  الإعدادات
+# ─────────────────────────────────────────
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
+ADMIN_USERNAME = "@rocksx44"
 
-SERVICES = {
-    "service_1": {
-        "name": "هاك ببجي يومي 🎮",
-        "description": "هاك ببجي موبايل للآيفون — اشتراك يومي (24 ساعة)",
-        "price_stars": 250,
-        "emoji": "🔥",
-    },
-    "service_2": {
-        "name": "هاك ببجي أسبوعي 🎮",
-        "description": "هاك ببجي موبايل للآيفون — اشتراك أسبوعي (7 أيام)",
-        "price_stars": 750,
-        "emoji": "⚡",
-    },
-    "service_3": {
-        "name": "هاك ببجي شهري 🎮",
-        "description": "هاك ببجي موبايل للآيفون — اشتراك شهري (30 يوم)",
-        "price_stars": 1900,
-        "emoji": "👑",
-    },
+# مراحل المحادثة
+DEVICE, COUNTRY, PLAN = range(3)
+
+# الأسعار بالدولار
+PRICES_USD = {
+    "daily":   {"label": "يومي",    "price": 5},
+    "weekly":  {"label": "أسبوعي",  "price": 15},
+    "monthly": {"label": "شهري",    "price": 30},
 }
+
+# أسعار الصرف التقريبية
+COUNTRIES = {
+    "🇲🇦 المغرب":       {"currency": "درهم",  "rate": 10.0},
+    "🇩🇿 الجزائر":      {"currency": "دينار", "rate": 135.0},
+    "🇸🇦 السعودية":     {"currency": "ريال",  "rate": 3.75},
+    "🇮🇶 العراق":       {"currency": "دينار", "rate": 1310.0},
+    "🇾🇪 اليمن":        {"currency": "ريال",  "rate": 250.0},
+    "🇯🇴 الأردن":       {"currency": "دينار", "rate": 0.71},
+    "🇱🇧 لبنان":        {"currency": "دولار", "rate": 1.0},
+    "🇶🇦 قطر":          {"currency": "ريال",  "rate": 3.64},
+    "🇰🇼 الكويت":       {"currency": "دينار", "rate": 0.31},
+    "🇪🇬 مصر":          {"currency": "جنيه",  "rate": 48.0},
+    "🇦🇪 الإمارات":     {"currency": "درهم",  "rate": 3.67},
+    "🌍 دولة أخرى":     {"currency": "دولار", "rate": 1.0},
+}
+
+# مميزات الهاك
+FEATURES = """
+🎮 *مميزات أوزيس للآيفون* 🔥
+بدون جلبريك ✅
+
+👇 مواصفات الهاك:
+• 📡 رادار سلس جداً ✅
+• ⚡ بدون تقطيع وبدون لاق ✅
+• 🎯 ايم بوت ذكي وآمن ✅
+• ✨ خالي من المشاكل حرفياً ✅
+"""
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -51,92 +67,197 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+# ─────────────────────────────────────────
+#  🤖  ردود ذكية على الرسائل
+# ─────────────────────────────────────────
+
+GREETINGS = ["السلام", "سلام", "هلا", "مرحبا", "مرحباً", "اهلا", "أهلاً", "هاي", "hi", "hello", "ص"]
+SUBSCRIPTION_WORDS = ["اشتراك", "اشترك", "شراء", "اشتري", "سعر", "كم", "باكج", "باقة"]
+
+async def smart_reply(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    text = update.message.text.lower()
     user = update.effective_user
-    text = (
-        f"👋 أهلاً {user.first_name}!\n\n"
-        "🎮 مرحباً بك في متجر هاك ببجي للآيفون.\n"
-        "اختر اشتراكك أدناه:"
-    )
-    keyboard = [
-        [InlineKeyboardButton(
-            f"{s['emoji']} {s['name']} — {s['price_stars']} ⭐",
-            callback_data=f"buy_{sid}"
-        )]
-        for sid, s in SERVICES.items()
-    ]
-    keyboard.append([InlineKeyboardButton("ℹ️ مساعدة", callback_data="help")])
-    await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
+
+    # رد على التحية
+    if any(g in text for g in GREETINGS):
+        await update.message.reply_text(
+            f"وعليكم السلام ورحمة الله 👋\n"
+            f"أهلاً {user.first_name}! كيف يمكنني مساعدتك؟ 😊\n\n"
+            f"اكتب *اشتراك* إذا أردت معرفة باقاتنا 🎮",
+            parse_mode="Markdown"
+        )
+        return ConversationHandler.END
+
+    # رد على طلب الاشتراك
+    if any(w in text for w in SUBSCRIPTION_WORDS):
+        keyboard = [
+            [InlineKeyboardButton("📱 آيفون (iOS)", callback_data="device_ios")],
+            [InlineKeyboardButton("🤖 أندرويد", callback_data="device_android")],
+        ]
+        await update.message.reply_text(
+            "🎮 أهلاً بك في متجر هاك ببجي!\n\n"
+            "ما نوع جهازك؟",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        return DEVICE
+
+    return ConversationHandler.END
 
 
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    text = (
-        "📖 *كيفية الشراء:*\n\n"
-        "1️⃣ اضغط /start\n"
-        "2️⃣ اختر الاشتراك\n"
-        "3️⃣ ادفع بنجوم تيليجرام ⭐\n"
-        "4️⃣ ستحصل على الهاك فوراً\n\n"
-        "❓ للدعم: @YourSupportUsername"
-    )
-    await update.message.reply_text(text, parse_mode="Markdown")
-
-
-async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def device_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     await query.answer()
-    data = query.data
 
-    if data == "help":
-        await query.message.reply_text("📖 اضغط /help للتعليمات.")
-        return
-
-    if data.startswith("buy_"):
-        service_id = data[4:]
-        service = SERVICES.get(service_id)
-        if not service:
-            await query.message.reply_text("❌ الخدمة غير موجودة.")
-            return
-
-        await context.bot.send_invoice(
-            chat_id=query.message.chat_id,
-            title=service["name"],
-            description=service["description"],
-            payload=service_id,
-            currency="XTR",
-            prices=[LabeledPrice(service["name"], service["price_stars"])],
+    if query.data == "device_android":
+        await query.message.reply_text(
+            "⚠️ عذراً، الهاك متاح للآيفون فقط حالياً.\n"
+            "للاستفسار تواصل مع الدعم: " + ADMIN_USERNAME
         )
+        return ConversationHandler.END
 
-
-async def pre_checkout_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    query = update.pre_checkout_query
-    if query.invoice_payload not in SERVICES:
-        await query.answer(ok=False, error_message="❌ الخدمة غير متوفرة.")
-        return
-    await query.answer(ok=True)
-
-
-async def successful_payment_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    payment = update.message.successful_payment
-    service_id = payment.invoice_payload
-    service = SERVICES.get(service_id, {})
-
-    await update.message.reply_text(
-        f"✅ *تم الدفع بنجاح!*\n\n"
-        f"🎮 شكراً على شرائك *{service.get('name', '')}*\n"
-        f"⭐ النجوم المدفوعة: {payment.total_amount}\n\n"
-        f"سيتواصل معك فريقنا قريباً لتفعيل الهاك. 🙏",
+    # آيفون — عرض المميزات
+    keyboard = [[InlineKeyboardButton("✅ عرض الأسعار", callback_data="show_countries")]]
+    await query.message.reply_text(
+        FEATURES,
         parse_mode="Markdown",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+    return COUNTRY
+
+
+async def show_countries(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+
+    keyboard = []
+    row = []
+    for i, country in enumerate(COUNTRIES.keys()):
+        row.append(InlineKeyboardButton(country, callback_data=f"country_{country}"))
+        if len(row) == 2:
+            keyboard.append(row)
+            row = []
+    if row:
+        keyboard.append(row)
+
+    await query.message.reply_text(
+        "🌍 من أي دولة أنت؟\n(لعرض الأسعار بعملتك)",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+    return COUNTRY
+
+
+async def country_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+
+    country = query.data.replace("country_", "")
+    info = COUNTRIES.get(country, {"currency": "دولار", "rate": 1.0})
+    context.user_data["country"] = country
+    context.user_data["currency"] = info["currency"]
+    context.user_data["rate"] = info["rate"]
+
+    rate = info["rate"]
+    currency = info["currency"]
+
+    keyboard = []
+    for plan_id, plan in PRICES_USD.items():
+        local_price = round(plan["price"] * rate, 2)
+        if currency == "دولار":
+            price_text = f"{plan['price']}$"
+        else:
+            price_text = f"{local_price} {currency} (~{plan['price']}$)"
+        keyboard.append([InlineKeyboardButton(
+            f"{'🔥' if plan_id=='daily' else '⚡' if plan_id=='weekly' else '👑'} {plan['label']} — {price_text}",
+            callback_data=f"plan_{plan_id}"
+        )])
+
+    await query.message.reply_text(
+        f"💰 *الأسعار لـ {country}:*",
+        parse_mode="Markdown",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+    return PLAN
+
+
+async def plan_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+
+    plan_id = query.data.replace("plan_", "")
+    plan = PRICES_USD[plan_id]
+    country = context.user_data.get("country", "")
+    currency = context.user_data.get("currency", "دولار")
+    rate = context.user_data.get("rate", 1.0)
+
+    local_price = round(plan["price"] * rate, 2)
+    if currency == "دولار":
+        price_text = f"{plan['price']}$"
+    else:
+        price_text = f"{local_price} {currency}"
+
+    await query.message.reply_text(
+        f"✅ *اخترت الاشتراك {plan['label']}*\n\n"
+        f"💵 السعر: {price_text}\n\n"
+        f"للإتمام الشراء تواصل مع:\n"
+        f"👤 {ADMIN_USERNAME}\n\n"
+        f"أرسل له:\n"
+        f"• نوع الاشتراك: {plan['label']}\n"
+        f"• بلدك: {country}",
+        parse_mode="Markdown"
+    )
+    return ConversationHandler.END
+
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user = update.effective_user
+    keyboard = [
+        [InlineKeyboardButton("🎮 عرض الباقات", callback_data="device_ios")],
+        [InlineKeyboardButton("💬 تواصل مع الدعم", url=f"https://t.me/rocksx44")],
+    ]
+    await update.message.reply_text(
+        f"👋 أهلاً {user.first_name}!\n\n"
+        f"🎮 *متجر هاك ببجي للآيفون*\n\n"
+        f"• بدون جلبريك ✅\n"
+        f"• رادار + ايم بوت ✅\n"
+        f"• بدون لاق ✅\n\n"
+        f"اضغط عرض الباقات للبدء 👇",
+        parse_mode="Markdown",
+        reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
+
+async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    await update.message.reply_text("تم الإلغاء. اكتب /start للبدء من جديد.")
+    return ConversationHandler.END
+
+
+# ─────────────────────────────────────────
+#  🚀  تشغيل البوت
+# ─────────────────────────────────────────
 
 def main() -> None:
     app = Application.builder().token(BOT_TOKEN).build()
+
+    conv_handler = ConversationHandler(
+        entry_points=[
+            MessageHandler(filters.TEXT & ~filters.COMMAND, smart_reply),
+            CallbackQueryHandler(device_handler, pattern="^device_"),
+        ],
+        states={
+            DEVICE: [CallbackQueryHandler(device_handler, pattern="^device_")],
+            COUNTRY: [
+                CallbackQueryHandler(show_countries, pattern="^show_countries$"),
+                CallbackQueryHandler(country_handler, pattern="^country_"),
+            ],
+            PLAN: [CallbackQueryHandler(plan_handler, pattern="^plan_")],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+    )
+
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("help", help_command))
-    app.add_handler(CallbackQueryHandler(button_handler))
-    app.add_handler(PreCheckoutQueryHandler(pre_checkout_handler))
-    app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment_handler))
-    logger.info("✅ البوت يعمل...")
+    app.add_handler(conv_handler)
+
+    logger.info("✅ البوت الذكي يعمل...")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 
