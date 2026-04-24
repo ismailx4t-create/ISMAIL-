@@ -4,6 +4,7 @@
 """
 
 import logging
+import os
 from telegram import (
     Update,
     InlineKeyboardButton,
@@ -20,37 +21,29 @@ from telegram.ext import (
     ContextTypes,
 )
 
-# ─────────────────────────────────────────
-#  ⚙️  الإعدادات – عدّلها حسب احتياجك
-# ─────────────────────────────────────────
-import os
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 
-# قائمة الخدمات  {id: {name, description, price_stars, emoji}}
 SERVICES = {
     "service_1": {
-        "name": "خدمة أساسية",
-        "description": "وصف مختصر للخدمة الأساسية",
-        "price_stars": 50,          # السعر بعدد النجوم
-        "emoji": "⭐",
+        "name": "هاك ببجي يومي 🎮",
+        "description": "هاك ببجي موبايل للآيفون — اشتراك يومي (24 ساعة)",
+        "price_stars": 250,
+        "emoji": "🔥",
     },
     "service_2": {
-        "name": "خدمة احترافية",
-        "description": "وصف مختصر للخدمة الاحترافية",
-        "price_stars": 150,
-        "emoji": "🚀",
+        "name": "هاك ببجي أسبوعي 🎮",
+        "description": "هاك ببجي موبايل للآيفون — اشتراك أسبوعي (7 أيام)",
+        "price_stars": 750,
+        "emoji": "⚡",
     },
     "service_3": {
-        "name": "خدمة VIP",
-        "description": "وصف مختصر لخدمة VIP المميزة",
-        "price_stars": 300,
+        "name": "هاك ببجي شهري 🎮",
+        "description": "هاك ببجي موبايل للآيفون — اشتراك شهري (30 يوم)",
+        "price_stars": 1900,
         "emoji": "👑",
     },
 }
 
-# ─────────────────────────────────────────
-#  🪵  السجلات
-# ─────────────────────────────────────────
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     level=logging.INFO,
@@ -58,17 +51,12 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-# ─────────────────────────────────────────
-#  🤖  أوامر البوت
-# ─────────────────────────────────────────
-
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """رسالة الترحيب + عرض قائمة الخدمات"""
     user = update.effective_user
     text = (
         f"👋 أهلاً {user.first_name}!\n\n"
-        "🛍️ مرحباً بك في متجرنا.\n"
-        "اختر إحدى الخدمات المتاحة أدناه:"
+        "🎮 مرحباً بك في متجر هاك ببجي للآيفون.\n"
+        "اختر اشتراكك أدناه:"
     )
     keyboard = [
         [InlineKeyboardButton(
@@ -82,32 +70,24 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """شرح طريقة الاستخدام"""
     text = (
         "📖 *كيفية الشراء:*\n\n"
-        "1️⃣ اضغط /start لعرض الخدمات\n"
-        "2️⃣ اختر الخدمة التي تريدها\n"
-        "3️⃣ أكمل عملية الدفع بنجوم تيليجرام ⭐\n"
-        "4️⃣ ستحصل على الخدمة فوراً بعد الدفع\n\n"
-        "❓ للتواصل مع الدعم: @YourSupportUsername"
+        "1️⃣ اضغط /start\n"
+        "2️⃣ اختر الاشتراك\n"
+        "3️⃣ ادفع بنجوم تيليجرام ⭐\n"
+        "4️⃣ ستحصل على الهاك فوراً\n\n"
+        "❓ للدعم: @YourSupportUsername"
     )
     await update.message.reply_text(text, parse_mode="Markdown")
 
 
-# ─────────────────────────────────────────
-#  🛒  منطق الشراء
-# ─────────────────────────────────────────
-
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """معالجة أزرار الإنلاين"""
     query = update.callback_query
     await query.answer()
     data = query.data
 
     if data == "help":
-        await query.message.reply_text(
-            "📖 اضغط /help لقراءة تعليمات الشراء."
-        )
+        await query.message.reply_text("📖 اضغط /help للتعليمات.")
         return
 
     if data.startswith("buy_"):
@@ -117,83 +97,45 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             await query.message.reply_text("❌ الخدمة غير موجودة.")
             return
 
-        # إرسال فاتورة الدفع
         await context.bot.send_invoice(
             chat_id=query.message.chat_id,
             title=service["name"],
             description=service["description"],
-            payload=service_id,           # يُستخدم للتحقق لاحقاً
-            currency="XTR",               # XTR = Telegram Stars
+            payload=service_id,
+            currency="XTR",
             prices=[LabeledPrice(service["name"], service["price_stars"])],
-            # لا تحتاج provider_token مع Stars
         )
 
 
-async def pre_checkout_handler(
-    update: Update, context: ContextTypes.DEFAULT_TYPE
-) -> None:
-    """التحقق من الطلب قبل إتمام الدفع"""
+async def pre_checkout_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.pre_checkout_query
-    service_id = query.invoice_payload
-
-    if service_id not in SERVICES:
-        await query.answer(ok=False, error_message="❌ الخدمة غير متوفرة حالياً.")
+    if query.invoice_payload not in SERVICES:
+        await query.answer(ok=False, error_message="❌ الخدمة غير متوفرة.")
         return
-
-    # يمكنك هنا إضافة أي تحقق إضافي (مخزون، صلاحية المستخدم، إلخ)
     await query.answer(ok=True)
 
 
-async def successful_payment_handler(
-    update: Update, context: ContextTypes.DEFAULT_TYPE
-) -> None:
-    """تنفيذ الخدمة بعد الدفع الناجح"""
+async def successful_payment_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     payment = update.message.successful_payment
     service_id = payment.invoice_payload
     service = SERVICES.get(service_id, {})
-    stars_paid = payment.total_amount
 
-    logger.info(
-        "دفع ناجح | المستخدم: %s | الخدمة: %s | النجوم: %s",
-        update.effective_user.id,
-        service_id,
-        stars_paid,
-    )
-
-    # ─── أرسل هنا ما يحصل عليه الزبون بعد الشراء ───
     await update.message.reply_text(
         f"✅ *تم الدفع بنجاح!*\n\n"
-        f"🎉 شكراً على شرائك *{service.get('name', '')}*\n"
-        f"⭐ النجوم المدفوعة: {stars_paid}\n\n"
-        f"📦 *تفاصيل خدمتك:*\n"
-        f"{service.get('description', '')}\n\n"
-        f"سيتواصل معك فريقنا قريباً. 🙏",
+        f"🎮 شكراً على شرائك *{service.get('name', '')}*\n"
+        f"⭐ النجوم المدفوعة: {payment.total_amount}\n\n"
+        f"سيتواصل معك فريقنا قريباً لتفعيل الهاك. 🙏",
         parse_mode="Markdown",
     )
 
-    # ─── مثال: أرسل إشعاراً لصاحب البوت ───
-    # ADMIN_CHAT_ID = 123456789
-    # await context.bot.send_message(
-    #     ADMIN_CHAT_ID,
-    #     f"💰 طلب جديد!\nالمستخدم: {update.effective_user.id}\nالخدمة: {service_id}"
-    # )
-
-
-# ─────────────────────────────────────────
-#  🚀  تشغيل البوت
-# ─────────────────────────────────────────
 
 def main() -> None:
     app = Application.builder().token(BOT_TOKEN).build()
-
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CallbackQueryHandler(button_handler))
     app.add_handler(PreCheckoutQueryHandler(pre_checkout_handler))
-    app.add_handler(
-        MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment_handler)
-    )
-
+    app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment_handler))
     logger.info("✅ البوت يعمل...")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
